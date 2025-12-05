@@ -170,14 +170,20 @@ func HandleClaudeChatCompletions(w http.ResponseWriter, r *http.Request) {
 	
 	LogDebug("[Claude] Using API key: %s...", apiKey[:min(10, len(apiKey))])
 
-	if apiKey == "free" {
+	// 如果是 Anthropic 的 API key 或 "free"，使用匿名 token
+	if apiKey == "free" || strings.HasPrefix(apiKey, "sk-ant-") {
+		LogInfo("[Claude] Detected Anthropic API key or 'free', using anonymous token")
 		anonymousToken, err := GetAnonymousToken()
 		if err != nil {
 			LogError("Failed to get anonymous token: %v", err)
+			w.Header().Set("Content-Type", "application/json")
 			http.Error(w, `{"error":{"type":"api_error","message":"Failed to get token"}}`, http.StatusInternalServerError)
 			return
 		}
 		apiKey = anonymousToken
+		LogInfo("[Claude] Got anonymous token: %s...", apiKey[:min(20, len(apiKey))])
+	} else {
+		LogInfo("[Claude] Using provided z.ai token: %s...", apiKey[:min(20, len(apiKey))])
 	}
 
 	var req ClaudeRequest
@@ -201,13 +207,20 @@ func HandleClaudeChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	resp, _, err := makeUpstreamRequest(apiKey, messages, internalModel)
 	if err != nil {
-		LogError("Upstream request failed: %v", err)
-		http.Error(w, `{"error":{"type":"api_error","message":"Upstream error"}}`, http.StatusBadGateway)
+		LogError("[Claude] Upstream request failed: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(err.Error(), "invalid token") {
+			http.Error(w, `{"error":{"type":"authentication_error","message":"Invalid API key"}}`, http.StatusUnauthorized)
+		} else {
+			http.Error(w, `{"error":{"type":"api_error","message":"Upstream error"}}`, http.StatusBadGateway)
+		}
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		LogError("[Claude] Upstream error: status=%d", resp.StatusCode)
+		w.Header().Set("Content-Type", "application/json")
 		http.Error(w, `{"error":{"type":"api_error","message":"Upstream error"}}`, resp.StatusCode)
 		return
 	}

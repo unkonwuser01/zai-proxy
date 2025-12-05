@@ -34,13 +34,21 @@ go run main.go
 ### Docker 一键部署
 
 ```bash
+# 使用预构建镜像
 docker run -d -p 8000:8000 ghcr.io/kao0312/zai-proxy:latest
+
+# 或本地构建
+docker build -t zai-proxy .
+docker run -d -p 8000:8000 zai-proxy
 ```
 
 自定义端口和日志级别：
 
 ```bash
-docker run -d -p 8080:8000 -e LOG_LEVEL=debug ghcr.io/kao0312/zai-proxy:latest
+docker run -d -p 8080:8000 -e LOG_LEVEL=debug --name zai-proxy zai-proxy
+
+# 查看日志
+docker logs -f zai-proxy
 ```
 
 ## 环境变量
